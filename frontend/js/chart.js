@@ -14,6 +14,8 @@ const ChartManager = {
     predictionSeries: null,
     volumeChart: null,
     compareChart: null,
+    _resizeObserver: null,
+    _compareResizeObserver: null,
     _currentData: [],
     _indicators: {
         ma7: true,
@@ -47,15 +49,31 @@ const ChartManager = {
         const volumeContainer = document.getElementById(volumeContainerId);
         if (!container) return;
 
+        // Clean up previous resize observers if existing
+        if (this._resizeObserver) {
+            try { this._resizeObserver.disconnect(); } catch (e) {}
+            this._resizeObserver = null;
+        }
+
+        // Clean up previous charts if existing
+        if (this.chart) {
+            try { this.chart.remove(); } catch (e) {}
+            this.chart = null;
+        }
+        if (this.volumeChart) {
+            try { this.volumeChart.remove(); } catch (e) {}
+            this.volumeChart = null;
+        }
+
         container.innerHTML = '';
-        this.chart = null; this.candleSeries = null; this.maSeries = null;
+        this.candleSeries = null; this.maSeries = null;
         this.ma20Series = null; this.bbUpperSeries = null; this.bbLowerSeries = null;
-        this.predictionSeries = null; this.volumeChart = null; this.volumeSeries = null;
+        this.predictionSeries = null; this.volumeSeries = null;
 
         // Main candlestick chart
         this.chart = LightweightCharts.createChart(container, {
             ...this.chartOptions,
-            width: container.clientWidth,
+            width: container.clientWidth || 800,
             height: 350,
         });
 
@@ -95,7 +113,7 @@ const ChartManager = {
             volumeContainer.innerHTML = '';
             this.volumeChart = LightweightCharts.createChart(volumeContainer, {
                 ...this.chartOptions,
-                width: volumeContainer.clientWidth,
+                width: volumeContainer.clientWidth || 800,
                 height: 70,
                 rightPriceScale: { borderColor: 'rgba(255,255,255,0.06)', scaleMargins: { top: 0.1, bottom: 0 } },
                 timeScale: { visible: false },
@@ -115,12 +133,15 @@ const ChartManager = {
         }
 
         // Resize observer
-        const ro = new ResizeObserver(entries => {
+        this._resizeObserver = new ResizeObserver(entries => {
+            if (!entries || !entries.length) return;
             const w = entries[0].contentRect.width;
-            if (this.chart) this.chart.applyOptions({ width: w });
-            if (this.volumeChart) this.volumeChart.applyOptions({ width: w });
+            if (w > 0) {
+                if (this.chart) this.chart.applyOptions({ width: w });
+                if (this.volumeChart) this.volumeChart.applyOptions({ width: w });
+            }
         });
-        ro.observe(container);
+        this._resizeObserver.observe(container);
     },
 
     updateMainChart(data) {
@@ -302,10 +323,20 @@ const ChartManager = {
     createCompareChart(containerId, data1, data2, label1, label2) {
         const container = document.getElementById(containerId);
         if (!container) return;
+
+        if (this._compareResizeObserver) {
+            try { this._compareResizeObserver.disconnect(); } catch (e) {}
+            this._compareResizeObserver = null;
+        }
+        if (this.compareChart) {
+            try { this.compareChart.remove(); } catch (e) {}
+            this.compareChart = null;
+        }
+
         container.innerHTML = '';
 
         this.compareChart = LightweightCharts.createChart(container, {
-            ...this.chartOptions, width: container.clientWidth, height: 280,
+            ...this.chartOptions, width: container.clientWidth || 600, height: 280,
         });
 
         const norm1 = this._normalizeToBase100(data1);
@@ -318,10 +349,14 @@ const ChartManager = {
 
         this.compareChart.timeScale().fitContent();
 
-        const ro = new ResizeObserver(entries => {
-            if (this.compareChart) this.compareChart.applyOptions({ width: entries[0].contentRect.width });
+        this._compareResizeObserver = new ResizeObserver(entries => {
+            if (!entries || !entries.length) return;
+            const w = entries[0].contentRect.width;
+            if (w > 0 && this.compareChart) {
+                this.compareChart.applyOptions({ width: w });
+            }
         });
-        ro.observe(container);
+        this._compareResizeObserver.observe(container);
     },
 
     _normalizeToBase100(data) {

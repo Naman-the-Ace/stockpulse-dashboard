@@ -141,7 +141,11 @@
 
         $('welcome-screen').style.display = 'none';
         $('stock-detail').style.display = 'block';
-        $('chart-loading').classList.remove('hidden');
+
+        // Keep active time button in sync
+        document.querySelectorAll('.time-btn').forEach(b => {
+            b.classList.toggle('active', parseInt(b.dataset.days) === currentDays);
+        });
 
         try {
             const [stockData, summary] = await Promise.all([
@@ -196,9 +200,10 @@
                 window.open(Api.getExportUrl(symbol, currentDays), '_blank');
             };
 
-            // Chart
-            $('chart-loading').classList.add('hidden');
-            ChartManager.createMainChart('chart-container', 'volume-chart-container');
+            // Chart update or re-creation
+            if (!ChartManager.chart) {
+                ChartManager.createMainChart('chart-container', 'volume-chart-container');
+            }
             ChartManager.updateMainChart(stockData);
 
             // Render AI Quant Verdict & Synthesis
@@ -211,7 +216,6 @@
 
         } catch (err) {
             console.error('Failed to load stock:', err);
-            $('chart-loading').innerHTML = `<span style="color:#ef4444">Failed to load data</span>`;
         }
     }
 
