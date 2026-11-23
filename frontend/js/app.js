@@ -201,6 +201,9 @@
             ChartManager.createMainChart('chart-container', 'volume-chart-container');
             ChartManager.updateMainChart(stockData);
 
+            // Render AI Quant Verdict & Synthesis
+            renderQuantVerdict(summary, stockData);
+
             $('prediction-results').style.display = 'none';
             $('predict-btn').style.display = 'inline-flex';
             $('predict-btn').textContent = 'Generate 7-Day Forecast';
@@ -210,6 +213,106 @@
             console.error('Failed to load stock:', err);
             $('chart-loading').innerHTML = `<span style="color:#ef4444">Failed to load data</span>`;
         }
+    }
+
+    function renderQuantVerdict(summary, stockData) {
+        const badge = $('verdict-signal-badge');
+        const text = $('verdict-summary-text');
+        const tags = $('verdict-tags');
+
+        if (!summary || !badge || !text) return;
+
+        let score = 0; // -3 to +3
+        const observations = [];
+        const tagList = [];
+
+        // 1. Moving Average test
+        const latestPrice = summary.latest_close;
+        const lastCandle = stockData && stockData.length ? stockData[stockData.length - 1] : null;
+        if (lastCandle && lastCandle.ma_7) {
+            if (latestPrice >= lastCandle.ma_7) {
+                score += 1;
+                observations.push(`trading above its 7-day MA (${Utils.formatCurrency(lastCandle.ma_7)})`);
+                tagList.push(`<span class="quant-tag">Above 7d MA: <b>Bullish</b></span>`);
+            } else {
+                score -= 1;
+                observations.push(`trading below its 7-day MA (${Utils.formatCurrency(lastCandle.ma_7)})`);
+                tagList.push(`<span class="quant-tag">Below 7d MA: <b>Bearish</b></span>`);
+            }
+        }
+
+        // 2. RSI test
+        if (summary.rsi != null) {
+            if (summary.rsi >= 70) {
+                score -= 0.5;
+                observations.push(`overbought territory with RSI at ${summary.rsi.toFixed(1)}`);
+                tagList.push(`<span class="quant-tag">RSI (14): <b>Overbought (${summary.rsi.toFixed(1)})</b></span>`);
+            } else if (summary.rsi <= 35) {
+                score += 1;
+                observations.push(`oversold accumulation territory with RSI at ${summary.rsi.toFixed(1)}`);
+                tagList.push(`<span class="quant-tag">RSI (14): <b>Oversold / Value (${summary.rsi.toFixed(1)})</b></span>`);
+            } else if (summary.rsi > 50) {
+                score += 0.5;
+                observations.push(`positive momentum (RSI ${summary.rsi.toFixed(1)})`);
+                tagList.push(`<span class="quant-tag">RSI (14): <b>Momentum Up (${summary.rsi.toFixed(1)})</b></span>`);
+            } else {
+                score -= 0.5;
+                observations.push(`subdued momentum (RSI ${summary.rsi.toFixed(1)})`);
+                tagList.push(`<span class="quant-tag">RSI (14): <b>Momentum Soft (${summary.rsi.toFixed(1)})</b></span>`);
+            }
+        }
+
+        // 3. Sentiment Index
+        if (summary.latest_sentiment != null) {
+            if (summary.latest_sentiment >= 65) {
+                score += 1;
+                observations.push(`elevated institutional sentiment score (${summary.latest_sentiment.toFixed(0)}/100)`);
+                tagList.push(`<span class="quant-tag">Market Sentiment: <b>Bullish (${summary.latest_sentiment.toFixed(0)})</b></span>`);
+            } else if (summary.latest_sentiment <= 40) {
+                score -= 1;
+                observations.push(`defensive market sentiment score (${summary.latest_sentiment.toFixed(0)}/100)`);
+                tagList.push(`<span class="quant-tag">Market Sentiment: <b>Bearish (${summary.latest_sentiment.toFixed(0)})</b></span>`);
+            } else {
+                tagList.push(`<span class="quant-tag">Market Sentiment: <b>Neutral (${summary.latest_sentiment.toFixed(0)})</b></span>`);
+            }
+        }
+
+        // 4. Volatility Regime
+        if (summary.latest_volatility != null) {
+            const volPct = (summary.latest_volatility * 100).toFixed(1);
+            if (summary.latest_volatility < 0.20) {
+                tagList.push(`<span class="quant-tag">Volatility Regime: <b>Low & Stable (${volPct}%)</b></span>`);
+            } else if (summary.latest_volatility < 0.35) {
+                tagList.push(`<span class="quant-tag">Volatility Regime: <b>Moderate (${volPct}%)</b></span>`);
+            } else {
+                tagList.push(`<span class="quant-tag">Volatility Regime: <b>High Risk (${volPct}%)</b></span>`);
+            }
+        }
+
+        // Synthesize verdict
+        let verdict = 'NEUTRAL';
+        let badgeClass = 'neutral';
+        if (score >= 1.5) {
+            verdict = 'STRONG BUY / BULLISH';
+            badgeClass = 'bullish';
+        } else if (score >= 0.5) {
+            verdict = 'MODERATE BUY';
+            badgeClass = 'bullish';
+        } else if (score <= -1.5) {
+            verdict = 'STRONG SELL / BEARISH';
+            badgeClass = 'bearish';
+        } else if (score <= -0.5) {
+            verdict = 'CAUTION / DEFENSIVE';
+            badgeClass = 'bearish';
+        }
+
+        badge.textContent = verdict;
+        badge.className = 'quant-verdict__badge ' + badgeClass;
+
+        const obsText = observations.length > 0 ? observations.join(' with ') : 'balanced volume and stable volatility profile';
+        text.innerHTML = `<strong>${summary.name}</strong> displays a <strong>${verdict}</strong> setup. Key technical drivers indicate the stock is currently ${obsText}. Use Bollinger Bands and 20-day moving average overlays above for precise support/resistance entry points.`;
+
+        if (tags) tags.innerHTML = tagList.join('');
     }
 
     // ═══════════════════════════════════════════════════════════════
@@ -449,6 +552,15 @@
         $('stock-cards-grid').addEventListener('click', e => {
             const card = e.target.closest('.stock-mini-card');
             if (card) loadStock(card.dataset.symbol, currentDays);
+        });
+
+        // Indicator toggles (MA 7, MA 20, Bollinger Bands)
+        document.querySelectorAll('.indicator-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const indicator = btn.dataset.indicator;
+                const isActive = ChartManager.toggleIndicator(indicator);
+                btn.classList.toggle('active', isActive);
+            });
         });
 
         // Time filter

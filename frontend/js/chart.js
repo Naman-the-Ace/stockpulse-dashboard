@@ -7,10 +7,19 @@ const ChartManager = {
     chart: null,
     candleSeries: null,
     maSeries: null,
+    ma20Series: null,
+    bbUpperSeries: null,
+    bbLowerSeries: null,
     volumeSeries: null,
     predictionSeries: null,
     volumeChart: null,
     compareChart: null,
+    _currentData: [],
+    _indicators: {
+        ma7: true,
+        ma20: false,
+        bb: false,
+    },
 
     chartOptions: {
         layout: {
@@ -40,6 +49,7 @@ const ChartManager = {
 
         container.innerHTML = '';
         this.chart = null; this.candleSeries = null; this.maSeries = null;
+        this.ma20Series = null; this.bbUpperSeries = null; this.bbLowerSeries = null;
         this.predictionSeries = null; this.volumeChart = null; this.volumeSeries = null;
 
         // Main candlestick chart
@@ -55,8 +65,28 @@ const ChartManager = {
             wickDownColor: '#ef4444', wickUpColor: '#10b981',
         });
 
+        // Setup crosshair listener for HUD
+        this._setupCrosshairHUD();
+
+        // MA 7 line
         this.maSeries = this.chart.addLineSeries({
             color: '#7c3aed', lineWidth: 2, lineStyle: 0,
+            priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false,
+        });
+
+        // MA 20 line
+        this.ma20Series = this.chart.addLineSeries({
+            color: '#38bdf8', lineWidth: 2, lineStyle: 0,
+            priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false,
+        });
+
+        // Bollinger Bands
+        this.bbUpperSeries = this.chart.addLineSeries({
+            color: 'rgba(245, 158, 11, 0.7)', lineWidth: 1, lineStyle: 2,
+            priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false,
+        });
+        this.bbLowerSeries = this.chart.addLineSeries({
+            color: 'rgba(245, 158, 11, 0.7)', lineWidth: 1, lineStyle: 2,
             priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false,
         });
 
@@ -95,12 +125,16 @@ const ChartManager = {
 
     updateMainChart(data) {
         if (!this.candleSeries || !data.length) return;
+        this._currentData = data;
 
         const candleData = data.map(d => ({ time: d.date, open: d.open, high: d.high, low: d.low, close: d.close }));
         this.candleSeries.setData(candleData);
 
-        const maData = data.filter(d => d.ma_7 != null).map(d => ({ time: d.date, value: d.ma_7 }));
-        this.maSeries.setData(maData);
+        // Update default HUD with latest candle
+        this._updateHUDWithCandle(data[data.length - 1]);
+
+        // Render indicators based on state
+        this._renderIndicators();
 
         // Volume histogram with green/red coloring
         if (this.volumeSeries) {
@@ -114,6 +148,143 @@ const ChartManager = {
 
         this.chart.timeScale().fitContent();
         if (this.volumeChart) this.volumeChart.timeScale().fitContent();
+    },
+
+    toggleIndicator(name) {
+        if (this._indicators[name] !== undefined) {
+            this._indicators[name] = !this._indicators[name];
+            this._renderIndicators();
+        }
+        return this._indicators[name];
+    },
+
+    _renderIndicators() {
+        if (!this._currentData || !this._currentData.length) return;
+        const data = this._currentData;
+
+        // MA 7
+        if (this.maSeries) {
+            if (this._indicators.ma7) {
+                const maData = data.filter(d => d.ma_7 != null).map(d => ({ time: d.date, value: d.ma_7 }));
+                this.maSeries.setData(maData);
+            } else {
+                this.maSeries.setData([]);
+            }
+        }
+
+        // MA 20
+        if (this.ma20Series) {
+            if (this._indicators.ma20) {
+                const ma20Data = this._calculateMA(data, 20);
+                this.ma20Series.setData(ma20Data);
+            } else {
+                this.ma20Series.setData([]);
+            }
+        }
+
+        // Bollinger Bands (20 period, 2 std dev)
+        if (this.bbUpperSeries && this.bbLowerSeries) {
+            if (this._indicators.bb) {
+                const { upper, lower } = this._calculateBollingerBands(data, 20, 2);
+                this.bbUpperSeries.setData(upper);
+                this.bbLowerSeries.setData(lower);
+            } else {
+                this.bbUpperSeries.setData([]);
+                this.bbLowerSeries.setData([]);
+            }
+        }
+    },
+
+    _calculateMA(data, period) {
+        const result = [];
+        for (let i = 0; i < data.length; i++) {
+            if (i < period - 1) continue;
+            let sum = 0;
+            for (let j = 0; j < period; j++) {
+                sum += data[i - j].close;
+            }
+            result.push({ time: data[i].date, value: Number((sum / period).toFixed(2)) });
+        }
+        return result;
+    },
+
+    _calculateBollingerBands(data, period = 20, stdDevMultiplier = 2) {
+        const upper = [];
+        const lower = [];
+        for (let i = 0; i < data.length; i++) {
+            if (i < period - 1) continue;
+            let sum = 0;
+            for (let j = 0; j < period; j++) {
+                sum += data[i - j].close;
+            }
+            const mean = sum / period;
+            let variance = 0;
+            for (let j = 0; j < period; j++) {
+                variance += Math.pow(data[i - j].close - mean, 2);
+            }
+            const std = Math.sqrt(variance / period);
+            upper.push({ time: data[i].date, value: Number((mean + stdDevMultiplier * std).toFixed(2)) });
+            lower.push({ time: data[i].date, value: Number((mean - stdDevMultiplier * std).toFixed(2)) });
+        }
+        return { upper, lower };
+    },
+
+    _setupCrosshairHUD() {
+        if (!this.chart) return;
+        this.chart.subscribeCrosshairMove(param => {
+            if (!param || !param.time || !param.seriesData || !param.seriesData.size) {
+                if (this._currentData && this._currentData.length) {
+                    this._updateHUDWithCandle(this._currentData[this._currentData.length - 1]);
+                }
+                return;
+            }
+
+            const candle = param.seriesData.get(this.candleSeries);
+            if (candle) {
+                const dateStr = typeof param.time === 'string'
+                    ? param.time
+                    : `${param.time.year}-${String(param.time.month).padStart(2, '0')}-${String(param.time.day).padStart(2, '0')}`;
+                
+                // Find matching volume from data
+                const matched = this._currentData.find(d => d.date === dateStr);
+                this._updateHUDWithCandle({
+                    date: dateStr,
+                    open: candle.open,
+                    high: candle.high,
+                    low: candle.low,
+                    close: candle.close,
+                    volume: matched ? matched.volume : null,
+                });
+            }
+        });
+    },
+
+    _updateHUDWithCandle(c) {
+        if (!c) return;
+        const dateEl = document.getElementById('hud-date');
+        const openEl = document.getElementById('hud-open');
+        const highEl = document.getElementById('hud-high');
+        const lowEl = document.getElementById('hud-low');
+        const closeEl = document.getElementById('hud-close');
+        const chgEl = document.getElementById('hud-change');
+        const volEl = document.getElementById('hud-vol');
+
+        if (dateEl) dateEl.textContent = c.date || '—';
+        if (openEl) openEl.textContent = c.open ? Utils.formatCurrency(c.open) : '—';
+        if (highEl) highEl.textContent = c.high ? Utils.formatCurrency(c.high) : '—';
+        if (lowEl) lowEl.textContent = c.low ? Utils.formatCurrency(c.low) : '—';
+        if (closeEl) closeEl.textContent = c.close ? Utils.formatCurrency(c.close) : '—';
+
+        if (chgEl && c.open && c.close) {
+            const chg = ((c.close - c.open) / c.open) * 100;
+            const prefix = chg >= 0 ? '+' : '';
+            chgEl.textContent = `${prefix}${chg.toFixed(2)}%`;
+            chgEl.className = 'hud-val ' + (chg >= 0 ? 'gain' : 'loss');
+        }
+
+        if (volEl) {
+            volEl.textContent = c.volume ? Number(c.volume).toLocaleString('en-IN') : '—';
+        }
     },
 
     addPredictionLine(predictions) {

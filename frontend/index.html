@@ -156,6 +156,11 @@
                             <button class="time-btn" data-days="180">6M</button>
                             <button class="time-btn" data-days="365">1Y</button>
                         </div>
+                        <div class="indicator-toggles" id="indicator-toggles">
+                            <button class="indicator-btn active" data-indicator="ma7" id="toggle-ma7">MA(7)</button>
+                            <button class="indicator-btn" data-indicator="ma20" id="toggle-ma20">MA(20)</button>
+                            <button class="indicator-btn" data-indicator="bb" id="toggle-bb">Bollinger Bands</button>
+                        </div>
                         <div class="action-buttons">
                             <button class="btn btn--icon" id="export-btn" title="Download CSV">
                                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
@@ -166,6 +171,16 @@
 
                     <!-- Chart -->
                     <div class="chart-wrapper">
+                        <!-- Crosshair HUD -->
+                        <div class="chart-hud" id="chart-hud">
+                            <span class="hud-item"><span class="hud-label">DATE:</span> <span class="hud-val" id="hud-date">—</span></span>
+                            <span class="hud-item"><span class="hud-label">O:</span> <span class="hud-val" id="hud-open">—</span></span>
+                            <span class="hud-item"><span class="hud-label">H:</span> <span class="hud-val" id="hud-high">—</span></span>
+                            <span class="hud-item"><span class="hud-label">L:</span> <span class="hud-val" id="hud-low">—</span></span>
+                            <span class="hud-item"><span class="hud-label">C:</span> <span class="hud-val" id="hud-close">—</span></span>
+                            <span class="hud-item"><span class="hud-label">CHG:</span> <span class="hud-val" id="hud-change">—</span></span>
+                            <span class="hud-item"><span class="hud-label">VOL:</span> <span class="hud-val" id="hud-vol">—</span></span>
+                        </div>
                         <div class="chart-container" id="chart-container">
                             <div class="chart-loading" id="chart-loading">
                                 <div class="spinner"></div>
@@ -173,6 +188,19 @@
                             </div>
                         </div>
                         <div class="volume-chart" id="volume-chart-container"></div>
+                    </div>
+
+                    <!-- AI Quant Verdict & Synthesis Card -->
+                    <div class="quant-verdict-card" id="quant-verdict-card">
+                        <div class="quant-verdict__header">
+                            <div class="quant-verdict__title-group">
+                                <span class="quant-verdict__icon">&#x26A1;</span>
+                                <span class="quant-verdict__title">AI Quant Intelligence Verdict</span>
+                            </div>
+                            <span class="quant-verdict__badge" id="verdict-signal-badge">NEUTRAL</span>
+                        </div>
+                        <p class="quant-verdict__summary" id="verdict-summary-text">Analyzing quant indicators...</p>
+                        <div class="quant-verdict__tags" id="verdict-tags"></div>
                     </div>
 
                     <!-- Stats Cards -->
