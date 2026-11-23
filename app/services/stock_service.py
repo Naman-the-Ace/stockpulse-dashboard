@@ -27,7 +27,17 @@ def get_stock_data(
     if company is None:
         return []
 
-    cutoff = date.today() - timedelta(days=days)
+    # Use the latest date in the database as reference instead of system date.today()
+    # to protect against weekend/holiday gaps or static/historical seeded snapshots
+    latest_date = (
+        db.query(func.max(StockPrice.date))
+        .filter(StockPrice.company_id == company.id)
+        .scalar()
+    )
+    if latest_date is None:
+        return []
+
+    cutoff = latest_date - timedelta(days=days)
 
     return (
         db.query(StockPrice)
@@ -194,7 +204,11 @@ def get_correlation_matrix(db: Session, days: int = 90) -> dict:
     Compute Pearson correlation matrix of daily returns across all stocks.
     Returns a dictionary with symbols and correlation values.
     """
-    cutoff = date.today() - timedelta(days=days)
+    latest_date = db.query(func.max(StockPrice.date)).scalar()
+    if latest_date is None:
+        return {"symbols": [], "matrix": []}
+
+    cutoff = latest_date - timedelta(days=days)
     companies = db.query(Company).order_by(Company.symbol).all()
 
     # Collect daily returns per stock, indexed by date

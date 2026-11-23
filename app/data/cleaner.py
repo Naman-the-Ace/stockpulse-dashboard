@@ -35,6 +35,9 @@ def clean_and_transform(raw_data: Dict[str, pd.DataFrame]) -> Dict[str, pd.DataF
         df = df.copy()
 
         # --- 1. Handle missing values ---
+        # First drop any rows where all OHLC values are missing (e.g. unclosed / holiday / future ticks from data feeds)
+        df.dropna(subset=["Open", "High", "Low", "Close"], how="all", inplace=True)
+        # Forward fill and back fill any isolated intraday missing cells
         df.ffill(inplace=True)
         df.bfill(inplace=True)
         df.dropna(inplace=True)

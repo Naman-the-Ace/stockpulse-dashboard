@@ -22,7 +22,15 @@ def compare_stocks(db: Session, symbol1: str, symbol2: str, days: int = 90) -> O
     if not company1 or not company2:
         return None
 
-    cutoff = date.today() - timedelta(days=days)
+    latest_date = (
+        db.query(func.max(StockPrice.date))
+        .filter(StockPrice.company_id.in_([company1.id, company2.id]))
+        .scalar()
+    )
+    if latest_date is None:
+        return None
+
+    cutoff = latest_date - timedelta(days=days)
 
     data1 = (
         db.query(StockPrice)
